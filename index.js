@@ -59,3 +59,59 @@ app.post('/webhook', async (req, res) => {
     // Podemos usar o número do remetente como parte do session ID para manter o contexto
     const sessionId = uuidv4();
     const sessionPath = sessionClient.projectAgentSessionPath(
+      DIALOGFLOW_PROJECT_ID,
+      sessionId
+    );
+
+    const request = {
+      session: sessionPath,
+      queryInput: {
+        text: {
+          text: messageText,
+          languageCode: 'pt-BR', // Defina o idioma do seu agente Dialogflow
+        },
+      },
+    };
+
+    const responses = await sessionClient.detectIntent(request);
+    const result = responses[0].queryResult;
+
+    console.log('Resposta do Dialogflow:', result.fulfillmentText);
+
+    if (result.fulfillmentText) {
+      // Enviar a resposta de volta para o usuário via Ultramsg
+      const ultramsgUrl = `https://api.ultramsg.com/${ULTRAMSG_INSTANCE_ID}/messages/chat`;
+      const params = new URLSearchParams();
+      params.append('token', ULTRAMSG_TOKEN);
+      params.append('to', sender); // O número ou ID do grupo para o qual responder
+      params.append('body', result.fulfillmentText);
+
+      await axios.post(ultramsgUrl, params.toString(), {
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded'
+        }
+      });
+      console.log('Resposta enviada de volta ao usuário.');
+    } else {
+      console.log('Nenhuma resposta do Dialogflow para enviar.');
+    }
+    
+    res.sendStatus(200); // Responde OK para a Ultramsg
+  } catch (error) {
+    console.error('Erro no webhook ou ao processar mensagem:', error.message);
+    if (error.response) {
+      console.error('Detalhes do erro Axios:', error.response.data);
+    }
+    res.sendStatus(500); // Responde com erro interno do servidor
+  }
+});
+
+// Endpoint básico para verificar se o servidor está online
+app.get('/', (req, res) => {
+  res.send('O bot do WhatsApp está rodando!');
+});
+
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+  console.log(`Servidor rodando na porta ${PORT}`);
+});
