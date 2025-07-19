@@ -31,9 +31,16 @@ app.post('/webhook', async (req, res) => {
     // Acessa diretamente 'dados' (que é 'data' em português)
     const eventData = req.body.dados;
 
+    // Adiciona logs de depuração para entender a validação
+    console.log('DEBUG: eventData existe?', !!eventData);
+    console.log('DEBUG: eventData.tipo:', eventData ? eventData.tipo : 'N/A');
+    console.log('DEBUG: eventData.corpo existe?', eventData ? !!eventData.corpo : 'N/A');
+    console.log('DEBUG: eventData.tipo é "bate-papo"?', eventData ? eventData.tipo === 'bate-papo' : 'N/A');
+
     // Verifica se os dados do evento e o tipo de mensagem são válidos
+    // 'tipo' deve ser 'bate-papo' e 'corpo' não deve ser vazio
     if (!eventData || eventData.tipo !== 'bate-papo' || !eventData.corpo) {
-      console.log(`Não é uma mensagem de chat válida ou está vazia. Tipo: ${eventData ? eventData.tipo : 'N/A'}`);
+      console.log(`Não é uma mensagem de chat válida ou vazia. Tipo: ${eventData ? eventData.tipo : 'N/A'}`);
       return res.sendStatus(200);
     }
 
@@ -43,7 +50,7 @@ app.post('/webhook', async (req, res) => {
       return res.sendStatus(200);
     }
 
-    const sender = eventData.de; // 'de' é 'from' em português
+    const sender = eventData.de; // 'de' é 'from' em português (pode ser o ID do grupo ou do contato)
     const messageText = eventData.corpo; // 'corpo' é 'body' em português
 
     console.log(`Mensagem de ${sender}: "${messageText}"`);
@@ -52,59 +59,3 @@ app.post('/webhook', async (req, res) => {
     // Podemos usar o número do remetente como parte do session ID para manter o contexto
     const sessionId = uuidv4();
     const sessionPath = sessionClient.projectAgentSessionPath(
-      DIALOGFLOW_PROJECT_ID,
-      sessionId
-    );
-
-    const request = {
-      session: sessionPath,
-      queryInput: {
-        text: {
-          text: messageText,
-          languageCode: 'pt-BR', // Defina o idioma do seu agente Dialogflow
-        },
-      },
-    };
-
-    const responses = await sessionClient.detectIntent(request);
-    const result = responses[0].queryResult;
-
-    console.log('Resposta do Dialogflow:', result.fulfillmentText);
-
-    if (result.fulfillmentText) {
-      // Enviar a resposta de volta para o usuário via Ultramsg
-      const ultramsgUrl = `https://api.ultramsg.com/${ULTRAMSG_INSTANCE_ID}/messages/chat`;
-      const params = new URLSearchParams();
-      params.append('token', ULTRAMSG_TOKEN);
-      params.append('to', sender); // O número de volta para o remetente
-      params.append('body', result.fulfillmentText);
-
-      await axios.post(ultramsgUrl, params.toString(), {
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded'
-        }
-      });
-      console.log('Resposta enviada de volta ao usuário.');
-    } else {
-      console.log('Nenhuma resposta do Dialogflow para enviar.');
-    }
-    
-    res.sendStatus(200); // Responde OK para a Ultramsg
-  } catch (error) {
-    console.error('Erro no webhook ou ao processar mensagem:', error.message);
-    if (error.response) {
-      console.error('Detalhes do erro Axios:', error.response.data);
-    }
-    res.sendStatus(500); // Responde com erro interno do servidor
-  }
-});
-
-// Endpoint básico para verificar se o servidor está online
-app.get('/', (req, res) => {
-  res.send('O bot do WhatsApp está rodando!');
-});
-
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log(`Servidor rodando na porta ${PORT}`);
-});
